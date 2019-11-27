@@ -1,0 +1,107 @@
+---
+title: "Prediction assignment"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning=FALSE)
+```
+
+## 1. Overview
+This project uses machine learning algorithms to predict the maner the wearer of a human activity recognition device performed barbell lifts. It uses the Weight Lifting Exercises Dataset (Velloso et al., 2013). Two models are tested using decision tree and random forest. The latter shows higher accuracy and it is the one choosen.
+
+## 2. Data
+
+### 2.1 Summary
+Data comes from the Weight Lifting Exercises Dataset. This dataset contains data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants that were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The "classe" variable refers to how the lift was performed. Its values stand for the following:
+
+- Class A: exactly according to the specification
+- Class B: throwing the elbows to the front
+- Class C: lifting the dumbbell only halfway
+- Class D: lowering the dumbbell only halfway
+- Class E: throwing the hips to the front
+
+More information is available from [this website](http://groupware.les.inf.puc-rio.br/har).
+
+### 2.2 Exploratory data analysis and clean-up
+First, we load and clean up the data from the URLs.
+
+```{r}
+train_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(train_url), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(test_url), na.strings=c("NA","#DIV/0!",""))
+```
+
+Then we remove the columns with all NA values and the ones not relevant for our analysis (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window).
+
+```{r}
+training <- training[, colSums(is.na(training)) == 0]
+training <- training[,-c(1:7)]
+testing <- testing[, colSums(is.na(testing)) == 0]
+testing <- testing[,-c(1:7)]
+```
+
+
+### 2.3 Partitioning data set for cross-validation
+Cross-validation is performed by splitting the original training data set randomly without replacement into 2 subsets: TrainTraining (75% of the original set) and TestTraining (25%). The models will be fitted on the TrainTraining set, and tested on the TestTraining set. Once the most accurate model is established, it will be tested on the original testing data set.
+
+```{r}
+set.seed(234)
+require(caret)
+inTrain <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+trainTraining <- training[inTrain,]
+testTraining <- training[-inTrain,]
+```
+
+### 2.4 Expected out-of-sample error
+Accuracy is the proportion of correctly classified observations over the total sample in the testTraining dataset (the cross-validation data set). Expected accuracy refers to the accuracy anticipated in the testing data set (the out-of sample data set). The expected value of the out-of-sample error (the misclassification rate) corresponds to the expected number of missclassified observations in relation to the total number of observations in the testing data set, which is 1 minus the accuracy found in the cross-validation data set.
+
+## 3. Prediction models
+Two models will be tested using decision tree and random forest. The model with the highest accuracy will be chosen as the final model.
+
+### 3.1 Decision tree
+We fit a model using decision tree.
+
+```{r}
+require(rpart)
+require(e1071)
+modFit_dt <- rpart(classe ~ ., data=trainTraining, method="class")
+```
+
+Now let's predict the in-sample-error.
+
+```{r}
+pred_dt <- predict(modFit_dt, testTraining, type = "class")
+cm_dt <- confusionMatrix(pred_dt, testTraining$classe)
+cm_dt
+```
+
+### 3.2 Random forest
+A model is fitted using random forest.
+
+```{r}
+require(randomForest)
+modFit_rf <- randomForest(classe ~. , data=trainTraining, na.action=na.omit)
+```
+
+The prediction of the in-sample-error is performed below.
+
+```{r}
+pred_rf <- predict(modFit_rf, testTraining, type = "class")
+cm_rf <- confusionMatrix(pred_rf, testTraining$classe)
+cm_rf
+```
+
+### 3.3 Best prediction model
+The Random Forest algorithm performed better than Decision Tree. The accuracy for the Random Forest model is `r cm_rf$overall['Accuracy']` (95% CI: `r cm_rf$overall['95% CI']`), whereas the accuracy for the Decision tree model is `r cm_dt$overall['Accuracy']` (95% CI: `r cm_dt$overall['95% CI']`). The expected out-of-sample error is estimated `r 1 - cm_dt$overall['Accuracy']`. Since the accuracy is very high in the cross-validation data, it is expected that the accuracy will be high as well in the test set.
+
+## 4. Test model
+Now we test the Random forest model agains the test set.
+
+```{r}
+pred_final <- predict(modFit_rf, testing, type="class")
+pred_final
+```
